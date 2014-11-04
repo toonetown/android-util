@@ -12,15 +12,15 @@
 # emulator will not load.
 #
 # The following timeout values can be set:
-#   ANDROID_EMU_TIMEOUT_LAUNCH  (default 30)
-#   ANDROID_EMU_TIMEOUT_BOOT    (default 120)
+#   ANDROID_EMU_TIMEOUT_LAUNCH  (default 60)
+#   ANDROID_EMU_TIMEOUT_BOOT    (default 240)
 #
 #!/bin/bash
 source /etc/profile
 
 # Default timeout values
-ANDROID_EMU_TIMEOUT_LAUNCH=${ANDROID_EMU_TIMEOUT_LAUNCH:-30}
-ANDROID_EMU_TIMEOUT_BOOT=${ANDROID_EMU_TIMEOUT_BOOT:-15}
+ANDROID_EMU_TIMEOUT_LAUNCH=${ANDROID_EMU_TIMEOUT_LAUNCH:-60}
+ANDROID_EMU_TIMEOUT_BOOT=${ANDROID_EMU_TIMEOUT_BOOT:-240}
 
 # Returns if the emulator is running
 function is_running { kill -s 0 ${EMU_PID} >/dev/null 2>&1; }
