@@ -13,15 +13,13 @@
 #
 # The following timeout values can be set:
 #   ANDROID_EMU_TIMEOUT_LAUNCH  (default 30)
-#   ANDROID_EMU_TIMEOUT_START   (default 120)
-#   ANDROID_EMU_TIMEOUT_BOOT    (default 15)
+#   ANDROID_EMU_TIMEOUT_BOOT    (default 120)
 #
 #!/bin/bash
 source /etc/profile
 
 # Default timeout values
 ANDROID_EMU_TIMEOUT_LAUNCH=${ANDROID_EMU_TIMEOUT_LAUNCH:-30}
-ANDROID_EMU_TIMEOUT_START=${ANDROID_EMU_TIMEOUT_START:-120}
 ANDROID_EMU_TIMEOUT_BOOT=${ANDROID_EMU_TIMEOUT_BOOT:-15}
 
 # Returns if the emulator is running
@@ -59,8 +57,17 @@ while is_running && [ -z "${ADB}" ]; do
     fi
 done
 if [ -z "${ADB}" ]; then echo "Failed to start emulator"; exit 1; fi
-adb devices | grep ${PORT} >/dev/null 2>&1 || { echo "ADB not running, try restarting server"; exit 1; }
 export ADB="adb -s emulator-${PORT}"
+
+# Check that the bridge is set up
+COUNT=0
+while is_running; do
+    if adb devices | grep ${PORT} >/dev/null 2>&1; then
+        break
+    else 
+        check_count ${ANDROID_EMU_TIMEOUT_LAUNCH} "Timed out waiting for ADB server"
+    fi
+done
  
 # Wait for the device to be ready
 echo "Waiting for emulator to finish booting..."
@@ -71,7 +78,7 @@ while is_running; do
     if wait ${ADB_WAIT} 2>/dev/null; then
         pkill -HUP -P ${TIMEOUT}; wait ${TIMEOUT}; break
     else
-        check_count ${ANDROID_EMU_TIMEOUT_START} "Timed out waiting for emulator"
+        check_count ${ANDROID_EMU_TIMEOUT_BOOT} "Timed out waiting for emulator"
     fi
 done
 
