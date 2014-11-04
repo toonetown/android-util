@@ -1,0 +1,85 @@
+###############
+# Launches (and patches) the android emulator by running all the scripts within the patch directory.  The default
+# value of ANDROID_EMU_PATCHES is ${HOME}/.android/avd/patches.  You can specify a different value for the patch 
+# directory by specifying ANDROID_EMU_PATCHES as an environment variable.
+#
+# The scripts within the patch directory will be executed in order.  The variable "${ADB}" can be used within a
+# script to get the correct adb command to run (targetted to the appropriate port).  The variable "${ANDROID_EMU_TDIR}"
+# points to a directory that will be cleaned up when the emulator exits.  The variable "${ANDROID_EMU_PATCHES}" will
+# be set to the effective patch directory.
+#
+# Scripts are run with a PWD of the ANDROID_EMU_TDIR directory.  If any script exits with an error status, then the 
+# emulator will not load.
+#
+#!/bin/bash
+source /etc/profile
+
+# Returns if the emulator is running
+function is_running { kill -s 0 ${EMU_PID} >/dev/null 2>&1; }
+function kill_emu { [ -n "${1}" ] && echo "${1}"; kill -9 ${EMU_PID} >/dev/null 2>&1; wait ${EMU_PID} 2>/dev/null; }
+function check_count { COUNT=$((COUNT+1)); if [ ${COUNT} -lt ${1} ]; then sleep 1; else kill_emu "${2}"; fi; }
+
+export ANDROID_EMU_PATCHES="${ANDROID_EMU_PATCHES:-${HOME}/.android/avd/patches}"
+if [ ! -d "${ANDROID_EMU_PATCHES}" ]; then
+    echo "Missing patch directory '${ANDROID_EMU_PATCHES}'"
+    exit 1  
+fi
+
+# Run adb devices to make sure we have everything set up
+adb devices > /dev/null 2>&1 || exit $?
+
+# Set up a directory and FIFO
+export ANDROID_EMU_TDIR="${TMPDIR}/patch-emulator.$$"
+trap '[ -n "$(jobs -pr)" ] && kill $(jobs -pr) 2>/dev/null; wait 2>/dev/null; rm -rf ${ANDROID_EMU_TDIR}' EXIT
+mkdir -p "${ANDROID_EMU_TDIR}" || exit $?
+mkfifo "${ANDROID_EMU_TDIR}/fifo" || exit $?
+cat "${ANDROID_EMU_TDIR}/fifo" &
+
+# Launch the emulator
+emulator $@ > "${ANDROID_EMU_TDIR}/fifo" 2>&1 & EMU_PID=$!
+
+# Get the ADB command
+COUNT=0
+while is_running && [ -z "${ADB}" ]; do
+    PORT="$(lsof -nP -iTCP -sTCP:LISTEN -a -p ${EMU_PID} -Fn | grep '^n' | cut -d':' -f2 | sort -n | head -n1)"
+    if [ -z "${PORT}" ]; then
+        check_count 30 "Timed out getting port"
+    else
+        ADB="adb -s emulator-${PORT}"; break
+    fi
+done
+if [ -z "${ADB}" ]; then echo "Failed to start emulator"; exit 1; fi
+adb devices | grep ${PORT} >/dev/null 2>&1 || { echo "ADB not running, try restarting server"; exit 1; }
+export ADB="adb -s emulator-${PORT}"
+ 
+# Wait for the device to be ready
+echo "Waiting for emulator to finish booting..."
+COUNT=0
+while is_running; do
+    ( ${ADB} wait-for-device ) 2>/dev/null & ADB_WAIT=$!
+    ( sleep 1 && kill -HUP ${ADB_WAIT} ) 2>/dev/null & TIMEOUT=$!
+    if wait ${ADB_WAIT} 2>/dev/null; then
+        pkill -HUP -P ${TIMEOUT}; wait ${TIMEOUT}; break
+    else
+        check_count 120 "Timed out waiting for emulator"
+    fi
+done
+
+# And make sure the boot flag has been set as well
+COUNT=0
+while is_running && [ $(${ADB} shell getprop sys.boot_completed 2>/dev/null | grep '[0-9]' | wc -l) -eq 0 ]; do
+    check_count 15 "Timed out waiting for boot"
+done
+is_running || { echo "Emulator has died"; exit 1; }
+
+# Run the scripts
+cd "${ANDROID_EMU_TDIR}"
+for i in `find "${ANDROID_EMU_PATCHES}" -type f -perm +111 -depth 1`; do 
+    echo "Executing script $(basename "${i}")..."
+    /bin/bash ${i} || exit $?
+done
+
+# We are finished
+echo "Emulator running"
+wait ${EMU_PID} 2>/dev/null
+exit 0
