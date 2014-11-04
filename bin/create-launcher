@@ -1,0 +1,31 @@
+###############
+# Creates a launchable application using platypus.
+#!/bin/bash
+
+which platypus >/dev/null || {
+    echo "This script requires platypus.  Try 'brew install platypus'"
+    exit 1
+}
+
+if [ "${1}" == "-patched" ]; then
+    LAUNCHER="$(which patch-emulator)"
+    shift
+else
+    LAUNCHER="$(which emulator)"
+fi
+if [ -z "${LAUNCHER}" ]; then
+    echo "This script requires the emulator or patched emulator to be installed"
+fi
+
+AVD="${1}"
+shift
+APP="${1}"
+shift
+
+if [ -z "${AVD}" -o -z "${APP}" ]; then
+    echo "Usage: ${0} [-patched] <avd-name> <path/to/Output.app> [emulator-options...]"
+    exit 1
+fi
+
+echo "${LAUNCHER} @${AVD} $@ | $(which tee) ${HOME}/Library/Logs/emulator-${AVD}.log" | \
+platypus -o None -i "" -B -R -y - "${APP}"
