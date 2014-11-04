@@ -11,8 +11,18 @@
 # Scripts are run with a PWD of the ANDROID_EMU_TDIR directory.  If any script exits with an error status, then the 
 # emulator will not load.
 #
+# The following timeout values can be set:
+#   ANDROID_EMU_TIMEOUT_LAUNCH  (default 30)
+#   ANDROID_EMU_TIMEOUT_START   (default 120)
+#   ANDROID_EMU_TIMEOUT_BOOT    (default 15)
+#
 #!/bin/bash
 source /etc/profile
+
+# Default timeout values
+ANDROID_EMU_TIMEOUT_LAUNCH=${ANDROID_EMU_TIMEOUT_LAUNCH:-30}
+ANDROID_EMU_TIMEOUT_START=${ANDROID_EMU_TIMEOUT_START:-120}
+ANDROID_EMU_TIMEOUT_BOOT=${ANDROID_EMU_TIMEOUT_BOOT:-15}
 
 # Returns if the emulator is running
 function is_running { kill -s 0 ${EMU_PID} >/dev/null 2>&1; }
@@ -43,7 +53,7 @@ COUNT=0
 while is_running && [ -z "${ADB}" ]; do
     PORT="$(lsof -nP -iTCP -sTCP:LISTEN -a -p ${EMU_PID} -Fn | grep '^n' | cut -d':' -f2 | sort -n | head -n1)"
     if [ -z "${PORT}" ]; then
-        check_count 30 "Timed out getting port"
+        check_count ${ANDROID_EMU_TIMEOUT_LAUNCH} "Timed out getting port"
     else
         ADB="adb -s emulator-${PORT}"; break
     fi
@@ -61,14 +71,14 @@ while is_running; do
     if wait ${ADB_WAIT} 2>/dev/null; then
         pkill -HUP -P ${TIMEOUT}; wait ${TIMEOUT}; break
     else
-        check_count 120 "Timed out waiting for emulator"
+        check_count ${ANDROID_EMU_TIMEOUT_START} "Timed out waiting for emulator"
     fi
 done
 
 # And make sure the boot flag has been set as well
 COUNT=0
 while is_running && [ $(${ADB} shell getprop sys.boot_completed 2>/dev/null | grep '[0-9]' | wc -l) -eq 0 ]; do
-    check_count 15 "Timed out waiting for boot"
+    check_count ${ANDROID_EMU_TIMEOUT_BOOT} "Timed out waiting for boot"
 done
 is_running || { echo "Emulator has died"; exit 1; }
 
