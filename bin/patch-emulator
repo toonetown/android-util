@@ -16,7 +16,7 @@
 #   ANDROID_EMU_TIMEOUT_BOOT    (default 240)
 #
 #!/bin/bash
-source /etc/profile
+BASH=no source /etc/profile
 
 # Default timeout values
 ANDROID_EMU_TIMEOUT_LAUNCH=${ANDROID_EMU_TIMEOUT_LAUNCH:-60}
