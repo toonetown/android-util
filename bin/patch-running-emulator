@@ -1,0 +1,27 @@
+#!/bin/bash
+
+if [ -z "${1}" ]; then
+    echo "Usage: ${0} <emulator-name>"
+    exit 1
+fi 
+export ADB="adb -s ${1}"
+if [ $(${ADB} shell getprop sys.boot_completed 2>/dev/null | grep '[0-9]' | wc -l) -eq 0 ]; then
+    echo "Invalid (or not running) emulator ${1}"
+    exit 1
+fi
+
+export ANDROID_EMU_PATCHES="${ANDROID_EMU_PATCHES:-${HOME}/.android/avd/patches}"
+if [ ! -d "${ANDROID_EMU_PATCHES}" ]; then
+    echo "Missing patch directory '${ANDROID_EMU_PATCHES}'"
+    exit 1  
+fi
+
+export ANDROID_EMU_TDIR="${TMPDIR}/patch-emulator.$$"
+trap '[ -n "$(jobs -pr)" ] && kill $(jobs -pr) 2>/dev/null; wait 2>/dev/null; rm -rf ${ANDROID_EMU_TDIR}' EXIT
+mkdir -p "${ANDROID_EMU_TDIR}" || exit $?
+
+cd "${ANDROID_EMU_TDIR}"
+for i in `find "${ANDROID_EMU_PATCHES}" -type f -perm +111 -depth 1`; do 
+    echo "Executing script $(basename "${i}")..."
+    /bin/bash ${i} || exit $?
+done
